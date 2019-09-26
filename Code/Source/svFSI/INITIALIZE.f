@@ -30,15 +30,16 @@
 ! SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 !
 !--------------------------------------------------------------------
-!      
-!     This is to initialize or finalize svFSI variables/structures. 
-!      
+!
+!     This is to initialize or finalize svFSI variables/structures.
+!
 !--------------------------------------------------------------------
 
       SUBROUTINE INITIALIZE(timeP)
 
       USE COMMOD
       USE ALLFUN
+
 
       IMPLICIT NONE
 
@@ -51,9 +52,12 @@
       TYPE(FSILS_commuType) :: communicator
 
       REAL(KIND=8), ALLOCATABLE, DIMENSION(:,:) :: s
-
+      REAL(KIND=8) ini_c
       INTEGER :: iM, i
       CHARACTER(LEN=stdL) :: sTmp, fTmp
+
+
+
 
       tDof     = 0
       dFlag    = .FALSE.
@@ -73,6 +77,11 @@
             eq(iEq)%sym = 'NS'
          CASE (phys_heatF)
             eq(iEq)%dof = 1
+            IF (velFileFlag) tDof = tDof + nsd
+            eq(iEq)%sym = 'HF'
+         CASE (phys_RT)
+            eq(iEq)%dof = 1
+            IF (velFileFlag .AND. tDof .EQ. 0) tDof = tDof + nsd
             eq(iEq)%sym = 'HF'
          CASE (phys_heatS)
             eq(iEq)%dof = 1
@@ -111,6 +120,7 @@
          eq(iEq)%e     = tDof + eq(iEq)%dof
          tDof          = eq(iEq)%e
       END DO
+
       ierr = 0; IF (dFlag) ierr = 1
       i = 0; IF (cplBC%coupled) i = cplBC%nX
 
@@ -129,6 +139,9 @@
 
       ALLOCATE(Ao(tDof,tnNo), An(tDof,tnNo), Yo(tDof,tnNo),
      2   Yn(tDof,tnNo), Do(tDof,tnNo), Dn(tDof,tnNo))
+
+
+
 
       IF (.NOT.resetSim) THEN
          IF (.NOT.ALLOCATED(rmsh%flag)) ALLOCATE(rmsh%flag(nMsh))
@@ -204,6 +217,15 @@
             END IF
          ELSE
             CALL ZEROINIT
+            DO iEq=1, nEq
+               DO iDmn=1, eq(iEq)%nDmn
+                  IF(eq(iEq)%dmn(iDmn)%prop(initial_condition).NE.0)THEN
+                     Yo(eq(iEq)%s,:) =
+     2                  eq(iEq)%dmn(iDmn)%prop(initial_condition)
+                  END IF
+               END DO
+            END DO
+
          END IF ! stFileFlag
          rsTS = cTS
       ELSE
@@ -249,6 +271,7 @@
       ALLOCATE(s(1,tnNo))
       s = 1D0
       DO iEq=1, nEq
+
          DO iDmn=1, eq(iEq)%nDmn
             eq(iEq)%dmn(iDmn)%v = Integ(eq(iEq)%dmn(iDmn)%Id, s, 1, 1)
             IF (ISZERO(eq(iEq)%dmn(iDmn)%v)) wrn = "Volume of "//
@@ -258,6 +281,8 @@
             END IF
          END DO
       END DO
+
+
 
 !     Predicting new variables
       CALL PICP
@@ -295,6 +320,7 @@
       eq%iNorm = 0D0
 
       Ao = 0D0
+      Yo = 0D0
       Yo = 0D0
       Do = 0D0
 
@@ -448,32 +474,37 @@
          END DO
          DEALLOCATE(eq)
       END IF
-      IF (ALLOCATED(colPtr)) DEALLOCATE(colPtr)
-      IF (ALLOCATED(rowPtr)) DEALLOCATE(rowPtr)
 
 !     Deallocating sparse matrix structures
-      IF (lhs%foc) CALL FSILS_LHS_FREE(lhs)
+      IF(lhs%foc) CALL FSILS_LHS_FREE(lhs)
 #ifdef WITH_TRILINOS
       IF (useTrilinosLS .OR. useTrilinosAssemAndLS) THEN
          CALL TRILINOS_LHS_FREE() !free K and R in C++
       END IF
 #endif
-
-      IF (.NOT. useTrilinosAssemAndLS) THEN
+      IF (.NOT.useTrilinosAssemAndLS) THEN
          IF (ALLOCATED(Val)) DEALLOCATE(Val)
       END IF
 
-      IF (ALLOCATED(x)) DEALLOCATE(x)
-      IF (ALLOCATED(R)) DEALLOCATE(R)
-      IF (ALLOCATED(Ao)) DEALLOCATE(Ao)
-      IF (ALLOCATED(An)) DEALLOCATE(An)
-      IF (ALLOCATED(Yo)) DEALLOCATE(Yo)
-      IF (ALLOCATED(Yn)) DEALLOCATE(Yn)
-      IF (ALLOCATED(Do)) DEALLOCATE(Do)
-      IF (ALLOCATED(Dn)) DEALLOCATE(Dn)
-      IF (ALLOCATED(ltg)) DEALLOCATE(ltg)
-      IF (ALLOCATED(dmnId)) DEALLOCATE(dmnId)
-      IF (ALLOCATED(fN)) DEALLOCATE(FN)
+      IF (ALLOCATED(colPtr))   DEALLOCATE(colPtr)
+      IF (ALLOCATED(dmnId))    DEALLOCATE(dmnId)
+      IF (ALLOCATED(ltg))      DEALLOCATE(ltg)
+      IF (ALLOCATED(rowPtr))   DEALLOCATE(rowPtr)
+      IF (ALLOCATED(tagRT))    DEALLOCATE(tagRT)
+
+
+      IF (ALLOCATED(Ao))       DEALLOCATE(Ao)
+      IF (ALLOCATED(An))       DEALLOCATE(An)
+      IF (ALLOCATED(Do))       DEALLOCATE(Do)
+      IF (ALLOCATED(Dn))       DEALLOCATE(Dn)
+      IF (ALLOCATED(R))        DEALLOCATE(R)
+      IF (ALLOCATED(x))        DEALLOCATE(x)
+      IF (ALLOCATED(Yo))       DEALLOCATE(Yo)
+      IF (ALLOCATED(Yn))       DEALLOCATE(Yn)
+      IF (ALLOCATED(fN))       DEALLOCATE(fN)
+      IF (ALLOCATED(allU))     DEALLOCATE(allU)
+      IF (ALLOCATED(Un))       DEALLOCATE(Un)
+
       IF (ALLOCATED(cplBC%fa)) DEALLOCATE(cplBC%fa)
       IF (ALLOCATED(cplBC%xn)) DEALLOCATE(cplBC%xn)
       IF (ALLOCATED(cplBC%xo)) DEALLOCATE(cplBC%xo)
